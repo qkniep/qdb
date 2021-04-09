@@ -8,6 +8,21 @@ const B: usize = 36;
 const M: usize = 8;
 
 /// Sorts a file of size B blocks on external storage, using 4*B IOs.
+pub fn sort_merge_join(path: &str) {
+    let mut f = File::open(path).unwrap();
+    let mut buffers = [[0u8; 4096]; M];
+    let runs = (B + M - 1) / M;
+
+    if runs > M - 1 {
+        panic!("file too large for Multi-Way Merge-Sort");
+    }
+
+    sort_runs(&mut f, &mut buffers, runs);
+
+    // TODO Merge and Join
+}
+
+/// Sorts a file of size B blocks on external storage, using 4*B IOs.
 pub fn multiway_merge_sort(path: &str) {
     let mut f = File::open(path).unwrap();
     let mut buffers = [[0u8; 4096]; M];
@@ -17,20 +32,7 @@ pub fn multiway_merge_sort(path: &str) {
         panic!("file too large for Multi-Way Merge-Sort");
     }
 
-    // Sort runs
-    for run in 0..runs {
-        for i in 0..M {
-            if f.read(&mut buffers[i]).unwrap() == 0 {
-                break;
-            }
-        }
-
-        let mut sorted = buffers.concat();
-        sorted.sort();
-
-        let mut out = File::create(format!("temp{}.txt", run)).unwrap();
-        out.write(&sorted).unwrap();
-    }
+    sort_runs(&mut f, &mut buffers, runs);
 
     // Merge sorted runs
     let mut out = File::create("out.txt").unwrap();
@@ -80,6 +82,22 @@ pub fn multiway_merge_sort(path: &str) {
         out.write(&buffers[M - 1][..out_filled + 1]).unwrap();
     }
     out.flush().unwrap();
+}
+
+fn sort_runs(f: &mut File, buffers: &mut [[u8; 4096]; M], runs: usize) {
+    for run in 0..runs {
+        for i in 0..M {
+            if f.read(&mut buffers[i]).unwrap() == 0 {
+                break;
+            }
+        }
+
+        let mut sorted = buffers.concat();
+        sorted.sort();
+
+        let mut out = File::create(format!("temp{}.txt", run)).unwrap();
+        out.write(&sorted).unwrap();
+    }
 }
 
 #[cfg(test)]
