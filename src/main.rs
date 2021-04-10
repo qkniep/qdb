@@ -8,6 +8,7 @@ mod extensible_hash;
 mod external_sort;
 mod nested_loop_join;
 mod relation;
+mod replacer;
 mod table_scan;
 
 use buffer_manager::BufferManager;
