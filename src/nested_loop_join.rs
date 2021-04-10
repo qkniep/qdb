@@ -1,4 +1,4 @@
-// Copyright (C) 2021 qkniep <qkniep@qk-huawei>
+// Copyright (C) 2021 Quentin Kniep <hello@quentinkniep.com>
 // Distributed under terms of the MIT license.
 
 use crate::buffer_manager::BufferManager;
@@ -10,7 +10,7 @@ pub fn join(mm: &mut BufferManager) {
     // TODO always use smaller relation as outer
 }
 
-fn join_pages(p1: &Page, p2: &Page, leftAttr: usize, rightAttr: usize, out: &mut Page) {}
+fn join_pages(p1: &Page, p2: &Page, left_attr: usize, right_attr: usize, out: &mut Page) {}
 
 fn join_tuples() {}
 
