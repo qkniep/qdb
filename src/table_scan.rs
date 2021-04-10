@@ -3,9 +3,10 @@
 
 use std::fs::File;
 use std::io::Read;
+use std::sync::Arc;
 
-use crate::block::*;
 use crate::buffer_manager::BufferManager;
+use crate::page::*;
 use crate::relation::Relation;
 
 pub struct TableScanner<'a> {
@@ -22,16 +23,17 @@ impl<'a> TableScanner<'a> {
 }
 
 impl<'a> Iterator for TableScanner<'a> {
-    type Item = Block;
+    type Item = Arc<Page>;
 
-    // TODO handle errors & deallocate block if read 0 bytes
+    // TODO handle errors & deallocate page if read 0 bytes
     fn next(&mut self) -> Option<Self::Item> {
-        let mut b = self.mm.allocate_empty_block().unwrap();
-        let n = self.file.read(&mut b.data).unwrap();
+        /*let mut p = self.mm.allocate_empty_page().unwrap();
+        let n = self.file.read(&mut p.data).unwrap();
         match n {
             0 => None,
-            default => Some(b),
-        }
+            default => Some(p),
+        }*/
+        None
     }
 }
 

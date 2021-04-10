@@ -3,7 +3,7 @@
 
 use std::collections::{HashMap, VecDeque};
 
-type FrameID = usize;
+pub type FrameID = usize;
 
 pub trait Replacer {
     /// Initializes a new Replacer with support for a maximum of `num_pages` pages.
@@ -123,23 +123,23 @@ mod tests {
     fn clock() {
         let mut r = ClockReplacer::new(3);
         for _ in 0..5 {
-            assert_ne!(r.pick_victim(), None);
+            assert!(r.pick_victim().is_some());
         }
         r.pin(0);
         for _ in 0..5 {
-            assert_ne!(r.pick_victim(), None);
+            assert!(r.pick_victim().is_some());
         }
         r.pin(1);
         for _ in 0..5 {
-            assert_ne!(r.pick_victim(), None);
+            assert!(r.pick_victim().is_some());
         }
         r.pin(2);
         for _ in 0..5 {
-            assert_eq!(r.pick_victim(), None);
+            assert!(r.pick_victim().is_none());
         }
         r.unpin(0);
         for _ in 0..5 {
-            assert_ne!(r.pick_victim(), None);
+            assert!(r.pick_victim().is_some());
         }
     }
 
@@ -147,23 +147,23 @@ mod tests {
     fn lru() {
         let mut r = LRUReplacer::new(3);
         for _ in 0..5 {
-            assert_ne!(r.pick_victim(), None);
+            assert!(r.pick_victim().is_some());
         }
         r.pin(0);
         for _ in 0..5 {
-            assert_ne!(r.pick_victim(), None);
+            assert!(r.pick_victim().is_some());
         }
         r.pin(1);
         for _ in 0..5 {
-            assert_ne!(r.pick_victim(), None);
+            assert!(r.pick_victim().is_some());
         }
         r.pin(2);
         for _ in 0..5 {
-            assert_eq!(r.pick_victim(), None);
+            assert!(r.pick_victim().is_none());
         }
         r.unpin(0);
         for _ in 0..5 {
-            assert_ne!(r.pick_victim(), None);
+            assert!(r.pick_victim().is_some());
         }
     }
 }

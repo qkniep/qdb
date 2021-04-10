@@ -4,8 +4,8 @@
 use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom};
 
-use crate::block::{Block, BLOCK_SIZE};
 use crate::buffer_manager::BufferManager;
+use crate::page::{Page, PAGE_SIZE};
 use crate::table_scan::TableScanner;
 
 pub struct Relation<'a> {
@@ -25,12 +25,12 @@ impl<'a> Relation<'a> {
         return TableScanner::new(self, self.mm);
     }*/
 
-    /// Loads the block given by index from this relations disk file.
-    pub fn get_block(&'a self, block: usize) -> io::Result<Block> {
+    /// Loads the page given by index from this relations disk file.
+    pub fn get_page(&'a self, page: usize) -> io::Result<Page> {
         let mut file = File::open(&self.file).unwrap();
         let size = file.seek(SeekFrom::End(0))?;
-        file.seek(SeekFrom::Start((block * BLOCK_SIZE) as u64))?;
-        let mut b = Block::new();
+        file.seek(SeekFrom::Start((page * PAGE_SIZE) as u64))?;
+        let mut b = Page::new();
         b.used_space = file.read(&mut b.data)?;
         return Ok(b);
     }
@@ -45,7 +45,7 @@ mod tests {
         let mut mm = BufferManager::new(10);
         let r = Relation::new(&mut mm, "movies.txt");
         for i in 0..3 {
-            let b = r.get_block(i).unwrap();
+            let b = r.get_page(i).unwrap();
             assert!(b.used_space > 0);
         }
     }
