@@ -31,7 +31,7 @@ struct ClockFrame {
 }
 
 /// Clock (aka "Second Chance") Replacement Strategy
-struct ClockReplacer {
+pub struct ClockReplacer {
     frames: Vec<ClockFrame>,
     hand: FrameID,
     num_unpinned: usize,
@@ -79,7 +79,7 @@ struct LRUFrame {
 }
 
 /// Least Recently Used Replacement Strategy
-struct LRUReplacer {
+pub struct LRUReplacer {
     frames: VecDeque<LRUFrame>,
     pos: HashMap<FrameID, usize>,
 }
@@ -145,7 +145,7 @@ mod tests {
 
     #[test]
     fn lru() {
-        let mut r = ClockReplacer::new(3);
+        let mut r = LRUReplacer::new(3);
         for _ in 0..5 {
             assert_ne!(r.pick_victim(), None);
         }
