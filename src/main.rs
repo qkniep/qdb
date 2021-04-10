@@ -3,6 +3,7 @@
 
 mod btree;
 mod buffer_manager;
+mod disk_manager;
 mod extensible_hash;
 mod external_sort;
 mod nested_loop_join;

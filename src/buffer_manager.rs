@@ -5,6 +5,7 @@ use std::collections::{HashMap, VecDeque};
 use std::fmt::Display;
 use std::sync::Arc;
 
+use crate::disk_manager::DiskManager;
 use crate::page::*;
 use crate::replacer::{ClockReplacer, FrameID, Replacer};
 
@@ -15,6 +16,7 @@ pub struct BufferManager<R = ClockReplacer> {
     page_table: HashMap<PageID, FrameID>,
     free_list: VecDeque<PageID>,
     replacer: R,
+    //disk_manager: DiskManager,
 }
 
 impl Display for BufferManager {
@@ -66,7 +68,7 @@ impl<R: Replacer> BufferManager<R> {
     }
 
     /// Allocates a new empty page.
-    pub fn allocate_empty_page(&mut self) -> Option<Arc<Page>> {
+    pub fn new_page(&mut self) -> Option<Arc<Page>> {
         match self.find_free_page() {
             None => None,
             Some(frame) => {
@@ -133,9 +135,9 @@ mod tests {
     fn allocate_pages() {
         let mut mm = BufferManager::<ClockReplacer>::new(10);
         for _ in 0..10 {
-            assert!(mm.allocate_empty_page().is_some());
+            assert!(mm.new_page().is_some());
         }
-        assert!(mm.allocate_empty_page().is_none());
+        assert!(mm.new_page().is_none());
     }
 
     #[test]
@@ -143,10 +145,10 @@ mod tests {
         let mut mm = BufferManager::<ClockReplacer>::new(10);
         for i in 0..10 {
             assert_eq!(mm.pages_free(), 10 - i);
-            mm.allocate_empty_page();
+            mm.new_page();
         }
         assert_eq!(mm.pages_free(), 0);
-        mm.allocate_empty_page();
+        mm.new_page();
         assert_eq!(mm.pages_free(), 0);
     }
 }
