@@ -25,7 +25,7 @@ struct CliArgs {
 
     /// The file to read
     file: String,
-    // Quick and easy logging setup you get for free with quicli
+
     #[structopt(flatten)]
     verbosity: Verbosity,
 }
@@ -35,7 +35,7 @@ fn main() -> CliResult {
     println!("{}", mm);
 
     let args = CliArgs::from_args();
-    args.verbosity.setup_env_logger("head")?;
+    args.verbosity.setup_env_logger("qdb")?;
 
     let content = read_file(&args.file)?;
     let content_lines = content.lines();

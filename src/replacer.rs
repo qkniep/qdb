@@ -1,26 +1,24 @@
 // Copyright (C) 2021 Quentin Kniep <hello@quentinkniep.com>
 // Distributed under terms of the MIT license.
 
-use std::collections::{HashMap, VecDeque};
-
 pub type FrameID = usize;
 
 pub trait Replacer {
-    /// Initializes a new Replacer with support for a maximum of `num_pages` pages.
-    /// All pages should initially be unpinned.
-    fn new(num_pages: usize) -> Self;
+    /// Initializes a new Replacer with support for a maximum of `capacity` pages.
+    /// All frames should initially be unpinned.
+    fn new(capacity: usize) -> Self;
 
     /// Picks the next victim page as defined by the replacement strategy.
-    /// Returns the page ID of the removed pages if one was found.
+    /// Returns the frame ID of the removed page if one was found.
     fn pick_victim(&mut self) -> Option<FrameID>;
 
-    /// Indicates that the page can no longer be victimized until it is unpinned.
-    fn pin(&mut self, page: FrameID);
+    /// Indicates that the given frame can no longer be victimized until it is unpinned.
+    fn pin(&mut self, frame: FrameID);
 
-    /// Indicates that the page can now be victimized again.
-    fn unpin(&mut self, page: FrameID);
+    /// Indicates that the given frame can now be victimized again.
+    fn unpin(&mut self, frame: FrameID);
 
-    /// The number of victimizable pages, i.e. remove will succeed iff this if >0.
+    /// The number of victimizable frames, i.e. `pick_victim()` will succeed iff this is >0.
     fn len(&self) -> usize;
 }
 
@@ -38,11 +36,11 @@ pub struct ClockReplacer {
 }
 
 impl Replacer for ClockReplacer {
-    fn new(num_pages: usize) -> Self {
+    fn new(capacity: usize) -> Self {
         Self {
-            frames: vec![ClockFrame::default(); num_pages],
+            frames: vec![ClockFrame::default(); capacity],
             hand: 0,
-            num_unpinned: num_pages,
+            num_unpinned: capacity,
         }
     }
 
@@ -58,14 +56,14 @@ impl Replacer for ClockReplacer {
         return Some(self.hand);
     }
 
-    fn pin(&mut self, page: FrameID) {
-        self.frames[page].pinned = true;
+    fn pin(&mut self, frame: FrameID) {
+        self.frames[frame].pinned = true;
         self.num_unpinned -= 1;
     }
 
-    fn unpin(&mut self, page: FrameID) {
-        self.frames[page].pinned = false;
-        self.frames[page].used = true;
+    fn unpin(&mut self, frame: FrameID) {
+        self.frames[frame].pinned = false;
+        self.frames[frame].used = true;
         self.num_unpinned += 1;
     }
 
@@ -74,44 +72,84 @@ impl Replacer for ClockReplacer {
     }
 }
 
+#[derive(Clone, Default)]
 struct LRUFrame {
-    id: FrameID,
+    prev: FrameID,
+    next: FrameID,
 }
 
 /// Least Recently Used Replacement Strategy
 pub struct LRUReplacer {
-    frames: VecDeque<LRUFrame>,
-    pos: HashMap<FrameID, usize>,
+    frames: Vec<LRUFrame>,
+    head: FrameID,
+    tail: FrameID,
+    len: usize,
 }
 
 impl Replacer for LRUReplacer {
-    fn new(num_pages: usize) -> Self {
-        Self {
-            frames: VecDeque::with_capacity(num_pages),
-            pos: HashMap::with_capacity(num_pages),
+    fn new(capacity: usize) -> Self {
+        let mut r = Self {
+            frames: vec![LRUFrame::default(); capacity],
+            head: 0,
+            tail: capacity - 1,
+            len: capacity,
+        };
+        for i in 0..capacity {
+            r.frames[i].next = (i + 1) % capacity;
+            r.frames[i].prev = (capacity + i - 1) % capacity;
         }
+        return r;
     }
 
     fn pick_victim(&mut self) -> Option<FrameID> {
-        if let Some(page) = self.frames.pop_front() {
-            self.pos.remove(&page.id);
-            Some(page.id)
-        } else {
-            None
+        if self.len() == 0 {
+            return None;
         }
+
+        // remove from front
+        let h = self.head;
+        self.head = self.frames[h].next;
+        self.len -= 1;
+
+        self.unpin(h);
+        Some(h)
     }
 
-    fn pin(&mut self, page: FrameID) {
-        self.frames.remove(self.pos[&page]);
-        self.pos.remove(&page);
+    fn pin(&mut self, frame: FrameID) {
+        // remove frame
+        let p = self.frames[frame].prev;
+        let n = self.frames[frame].next;
+        self.frames[p].next = n;
+        self.frames[n].prev = p;
+        if frame == self.head {
+            self.head = n;
+        } else if frame == self.tail {
+            self.tail = p;
+        }
+
+        self.push_back(frame);
+        self.len -= 1;
     }
 
-    fn unpin(&mut self, page: FrameID) {
-        self.frames.push_back(LRUFrame { id: page });
+    fn unpin(&mut self, frame: FrameID) {
+        self.push_back(frame);
+        self.tail = frame;
+        self.len += 1;
     }
 
     fn len(&self) -> usize {
-        self.frames.len()
+        self.len
+    }
+}
+
+impl LRUReplacer {
+    fn push_back(&mut self, frame: FrameID) {
+        let t = self.tail;
+        let n = self.frames[t].next;
+        self.frames[t].next = frame;
+        self.frames[n].prev = frame;
+        self.frames[frame].prev = t;
+        self.frames[frame].next = n;
     }
 }
 
@@ -146,7 +184,8 @@ mod tests {
     #[test]
     fn lru() {
         let mut r = LRUReplacer::new(3);
-        for _ in 0..5 {
+        for i in 0..5 {
+            println!("{}", i);
             assert!(r.pick_victim().is_some());
         }
         r.pin(0);

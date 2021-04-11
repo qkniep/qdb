@@ -9,14 +9,15 @@ use crate::disk_manager::DiskManager;
 use crate::page::*;
 use crate::replacer::{ClockReplacer, FrameID, Replacer};
 
-///
+/// The Buffer Manager is responsible for keeping pages in memory, keeping track of pinned pages.
+/// It interacts with the Disk Manager to retrieve these pages from disk and write them back.
 pub struct BufferManager<R = ClockReplacer> {
     max_pages: usize,
     pub pages: Vec<Arc<Page>>,
     page_table: HashMap<PageID, FrameID>,
     free_list: VecDeque<PageID>,
     replacer: R,
-    //disk_manager: DiskManager,
+    disk_manager: DiskManager,
 }
 
 impl Display for BufferManager {
@@ -39,6 +40,7 @@ impl<R: Replacer> BufferManager<R> {
             page_table: HashMap::with_capacity(capacity),
             free_list: VecDeque::with_capacity(capacity),
             replacer: R::new(capacity),
+            disk_manager: DiskManager::new("xxxx.tmp"),
         };
         for i in 0..capacity {
             bm.free_list.push_back(i);
@@ -49,7 +51,7 @@ impl<R: Replacer> BufferManager<R> {
     /// Fetch the requested page, loading it form disk if necessary.
     /// Returns `None` if we failed to allocate the page, i.e. all pages are pinned.
     pub fn fetch_page(&mut self, page: PageID) -> Option<Arc<Page>> {
-        // Check if page is already cached
+        // Check if requested page is already cached
         if let Some(&frame) = self.page_table.get(&page) {
             return Some(self.pages[frame].clone());
         }
@@ -58,7 +60,7 @@ impl<R: Replacer> BufferManager<R> {
             None => None,
             Some(frame) => {
                 // TODO actually load page from disk
-                let p = Arc::new(Page::new());
+                let p = Arc::new(Page::new(page));
                 self.pages[frame] = p.clone();
                 self.page_table.insert(page, frame);
                 self.replacer.pin(frame);
@@ -68,13 +70,15 @@ impl<R: Replacer> BufferManager<R> {
     }
 
     /// Allocates a new empty page.
+    /// This page is pinned immediately.
     pub fn new_page(&mut self) -> Option<Arc<Page>> {
         match self.find_free_page() {
             None => None,
             Some(frame) => {
-                let p = Arc::new(Page::new());
+                let p_id = self.disk_manager.allocate_page();
+                let p = Arc::new(Page::new(p_id));
                 self.pages[frame] = p.clone();
-                self.page_table.insert(p.id, frame);
+                self.page_table.insert(p_id, frame);
                 self.replacer.pin(frame);
                 Some(p)
             }
@@ -82,11 +86,11 @@ impl<R: Replacer> BufferManager<R> {
     }
 
     ///
-    // TODO handle failure b/c pinned already was <= 0
+    // TODO handle failure b/c pin_count already was <= 0
     pub fn unpin_page(&mut self, page: PageID) {
         let frame = self.page_table[&page];
         // FIXME
-        //self.pages[frame].pinned -= 1;
+        //self.pages[frame].pin_count -= 1;
         self.replacer.unpin(page);
     }
 
@@ -96,6 +100,7 @@ impl<R: Replacer> BufferManager<R> {
         let frame = self.page_table.remove(&page).unwrap();
         self.free_list.push_back(frame);
         if self.pages[frame].dirty {
+            //self.disk_manager.write_page();
             self.pages[frame].write_to_disk("out");
         }
     }

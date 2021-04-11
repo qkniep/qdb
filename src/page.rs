@@ -7,34 +7,33 @@ pub type PageID = usize;
 
 pub struct Page {
     pub id: PageID,
-    pub data: [u8; PAGE_SIZE],
     pub dirty: bool,
     pub used_space: usize,
-    pub pinned: usize,
+    pub pin_count: usize,
+    pub data: [u8; PAGE_SIZE],
 }
 
 impl Default for Page {
     fn default() -> Self {
-        return Self {
+        Self {
             id: 0,
-            data: [0; PAGE_SIZE],
             dirty: false,
             used_space: 0,
-            pinned: 1,
-        };
+            pin_count: 0,
+            data: [0; PAGE_SIZE],
+        }
     }
 }
 
 impl Page {
-    // TODO assign different IDs
-    pub fn new() -> Self {
-        return Self {
-            id: 0,
-            data: [0; PAGE_SIZE],
+    pub fn new(id: PageID) -> Self {
+        Self {
+            id,
             dirty: false,
             used_space: 0,
-            pinned: 1,
-        };
+            pin_count: 1,
+            data: [0; PAGE_SIZE],
+        }
     }
 
     pub fn add_tuple() {}

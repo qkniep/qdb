@@ -5,7 +5,7 @@ use crate::buffer_manager::BufferManager;
 use crate::page::Page;
 
 pub fn join(mm: &mut BufferManager) {
-    let output_page = mm.allocate_empty_page();
+    let output_page = mm.new_page();
 
     // TODO always use smaller relation as outer
 }

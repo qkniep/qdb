@@ -30,7 +30,7 @@ impl<'a> Relation<'a> {
         let mut file = File::open(&self.file).unwrap();
         let size = file.seek(SeekFrom::End(0))?;
         file.seek(SeekFrom::Start((page * PAGE_SIZE) as u64))?;
-        let mut b = Page::new();
+        let mut b = Page::new(page);
         b.used_space = file.read(&mut b.data)?;
         return Ok(b);
     }
