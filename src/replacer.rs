@@ -1,6 +1,8 @@
 // Copyright (C) 2021 Quentin Kniep <hello@quentinkniep.com>
 // Distributed under terms of the MIT license.
 
+use std::fmt::Display;
+
 pub type FrameID = usize;
 
 pub trait Replacer {
@@ -28,11 +30,28 @@ struct ClockFrame {
     used: bool,
 }
 
-/// Clock (aka "Second Chance") Replacement Strategy
+/// Clock (aka "Second Chance") Replacement Strategy.
 pub struct ClockReplacer {
     frames: Vec<ClockFrame>,
     hand: FrameID,
     num_unpinned: usize,
+}
+
+impl Display for ClockReplacer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (i, frame) in self.frames.iter().enumerate() {
+            write!(f, "{}", i)?;
+            if frame.pinned {
+                write!(f, "p")?;
+            }
+            if frame.used {
+                write!(f, "*")?;
+            }
+            write!(f, ", ")?;
+        }
+        write!(f, " (h={})", self.hand)?;
+        Ok(())
+    }
 }
 
 impl Replacer for ClockReplacer {
@@ -53,7 +72,9 @@ impl Replacer for ClockReplacer {
             self.frames[self.hand].used = false;
             self.hand = (self.hand + 1) % self.frames.len();
         }
-        return Some(self.hand);
+        let h = self.hand;
+        self.hand = (self.hand + 1) % self.frames.len();
+        return Some(h);
     }
 
     fn pin(&mut self, frame: FrameID) {
@@ -78,12 +99,13 @@ struct LRUFrame {
     next: FrameID,
 }
 
-/// Least Recently Used Replacement Strategy
+/// Least Recently Used (LRU) Replacement Strategy.
+/// We always pick as victim the page that has gone the longest time without being pinned.
 pub struct LRUReplacer {
     frames: Vec<LRUFrame>,
     head: FrameID,
     tail: FrameID,
-    len: usize,
+    num_unpinned: usize,
 }
 
 impl Replacer for LRUReplacer {
@@ -92,7 +114,7 @@ impl Replacer for LRUReplacer {
             frames: vec![LRUFrame::default(); capacity],
             head: 0,
             tail: capacity - 1,
-            len: capacity,
+            num_unpinned: capacity,
         };
         for i in 0..capacity {
             r.frames[i].next = (i + 1) % capacity;
@@ -106,17 +128,39 @@ impl Replacer for LRUReplacer {
             return None;
         }
 
-        // remove from front
         let h = self.head;
-        self.head = self.frames[h].next;
-        self.len -= 1;
-
-        self.unpin(h);
+        if self.len() > 1 {
+            self.unpin(h);
+            self.num_unpinned -= 1;
+        }
         Some(h)
     }
 
     fn pin(&mut self, frame: FrameID) {
-        // remove frame
+        self.remove(frame);
+        self.push_back(frame);
+        self.num_unpinned -= 1;
+    }
+
+    fn unpin(&mut self, frame: FrameID) {
+        self.remove(frame);
+        self.push_back(frame);
+        if self.len() == 0 {
+            self.head = frame;
+        }
+        self.tail = frame;
+        self.num_unpinned += 1;
+    }
+
+    fn len(&self) -> usize {
+        self.num_unpinned
+    }
+}
+
+/// Utility functions for the underlying data structure.
+/// The `frames` vector basically simulates a doubly-linked list.
+impl LRUReplacer {
+    fn remove(&mut self, frame: FrameID) {
         let p = self.frames[frame].prev;
         let n = self.frames[frame].next;
         self.frames[p].next = n;
@@ -126,23 +170,8 @@ impl Replacer for LRUReplacer {
         } else if frame == self.tail {
             self.tail = p;
         }
-
-        self.push_back(frame);
-        self.len -= 1;
     }
 
-    fn unpin(&mut self, frame: FrameID) {
-        self.push_back(frame);
-        self.tail = frame;
-        self.len += 1;
-    }
-
-    fn len(&self) -> usize {
-        self.len
-    }
-}
-
-impl LRUReplacer {
     fn push_back(&mut self, frame: FrameID) {
         let t = self.tail;
         let n = self.frames[t].next;
@@ -158,51 +187,109 @@ mod tests {
     use super::*;
 
     #[test]
-    fn clock() {
+    fn clock_basic() {
         let mut r = ClockReplacer::new(3);
         for _ in 0..5 {
             assert!(r.pick_victim().is_some());
         }
         r.pin(0);
         for _ in 0..5 {
-            assert!(r.pick_victim().is_some());
+            let v = r.pick_victim();
+            assert!(v.is_some());
+            assert_ne!(v, Some(0));
         }
         r.pin(1);
-        for _ in 0..5 {
-            assert!(r.pick_victim().is_some());
-        }
+        assert_eq!(r.pick_victim(), Some(2));
+        assert_eq!(r.pick_victim(), Some(2));
         r.pin(2);
-        for _ in 0..5 {
-            assert!(r.pick_victim().is_none());
-        }
+        assert_eq!(r.pick_victim(), None);
+        assert_eq!(r.pick_victim(), None);
         r.unpin(0);
-        for _ in 0..5 {
-            assert!(r.pick_victim().is_some());
-        }
+        assert_eq!(r.pick_victim(), Some(0));
+        assert_eq!(r.pick_victim(), Some(0));
     }
 
     #[test]
-    fn lru() {
+    fn clock_order() {
+        let mut r = ClockReplacer::new(3);
+        println!("{}", r);
+        assert_eq!(r.pick_victim(), Some(0));
+        println!("{}", r);
+        use_page(&mut r, 0);
+        println!("{}", r);
+        assert_eq!(r.pick_victim(), Some(1));
+        println!("{}", r);
+        use_page(&mut r, 1);
+        println!("{}", r);
+        use_page(&mut r, 0);
+        println!("{}", r);
+        assert_eq!(r.pick_victim(), Some(2));
+        println!("{}", r);
+        use_page(&mut r, 2);
+        println!("{}", r);
+        assert_eq!(r.pick_victim(), Some(0));
+        use_page(&mut r, 0);
+        assert_eq!(r.pick_victim(), Some(1));
+        use_page(&mut r, 1);
+        assert_eq!(r.pick_victim(), Some(2));
+        use_page(&mut r, 2);
+        use_page(&mut r, 0);
+        assert_eq!(r.pick_victim(), Some(0));
+        use_page(&mut r, 0);
+        use_page(&mut r, 1);
+        assert_eq!(r.pick_victim(), Some(2));
+        use_page(&mut r, 0);
+    }
+
+    #[test]
+    fn lru_basic() {
         let mut r = LRUReplacer::new(3);
-        for i in 0..5 {
-            println!("{}", i);
+        for _ in 0..5 {
             assert!(r.pick_victim().is_some());
         }
         r.pin(0);
         for _ in 0..5 {
-            assert!(r.pick_victim().is_some());
+            let v = r.pick_victim();
+            assert!(v.is_some());
+            assert_ne!(v, Some(0));
         }
         r.pin(1);
-        for _ in 0..5 {
-            assert!(r.pick_victim().is_some());
-        }
+        assert_eq!(r.pick_victim(), Some(2));
+        assert_eq!(r.pick_victim(), Some(2));
         r.pin(2);
-        for _ in 0..5 {
-            assert!(r.pick_victim().is_none());
-        }
+        assert_eq!(r.pick_victim(), None);
+        assert_eq!(r.pick_victim(), None);
         r.unpin(0);
-        for _ in 0..5 {
-            assert!(r.pick_victim().is_some());
-        }
+        assert_eq!(r.pick_victim(), Some(0));
+        assert_eq!(r.pick_victim(), Some(0));
+    }
+
+    #[test]
+    fn lru_order() {
+        let mut r = LRUReplacer::new(3);
+        assert_eq!(r.pick_victim(), Some(0));
+        use_page(&mut r, 0);
+        assert_eq!(r.pick_victim(), Some(1));
+        use_page(&mut r, 1);
+        use_page(&mut r, 0);
+        assert_eq!(r.pick_victim(), Some(2));
+        use_page(&mut r, 2);
+        assert_eq!(r.pick_victim(), Some(1));
+        use_page(&mut r, 1);
+        use_page(&mut r, 0);
+        assert_eq!(r.pick_victim(), Some(2));
+        use_page(&mut r, 2);
+        use_page(&mut r, 1);
+        assert_eq!(r.pick_victim(), Some(0));
+        use_page(&mut r, 0);
+        assert_eq!(r.pick_victim(), Some(2));
+        use_page(&mut r, 2);
+        use_page(&mut r, 1);
+        use_page(&mut r, 2);
+    }
+
+    fn use_page<R: Replacer>(r: &mut R, frame: FrameID) {
+        r.pin(frame);
+        r.unpin(frame);
     }
 }
