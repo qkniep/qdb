@@ -2,6 +2,7 @@
 // Distributed under terms of the MIT license.
 
 use std::collections::{HashMap, VecDeque};
+use std::io::Write;
 use std::sync::Arc;
 
 use crate::disk_manager::DiskManager;
@@ -154,10 +155,13 @@ mod tests {
         for i in 0..CAPACITY {
             mm.unpin_page(i);
         }
-        for i in 0..CAPACITY - 1 {
+        for _ in 0..CAPACITY - 1 {
             assert!(mm.new_page().is_some());
         }
         assert!(mm.fetch_page(0).is_some());
+        mm.unpin_page(0);
+        assert!(mm.new_page().is_some());
+        assert!(mm.fetch_page(0).is_none());
     }
 
     #[test]
@@ -167,6 +171,11 @@ mod tests {
         assert!(p_opt.is_some());
         //write!(p_opt.unwrap().data, "Hello");
         mm.unpin_page(0);
-        // TODO
+        // force the page out of cache
+        for _ in 0..CAPACITY {
+            assert!(mm.new_page().is_some());
+        }
+        mm.fetch_page(0);
+        // TODO compare to written value
     }
 }
