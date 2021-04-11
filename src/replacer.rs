@@ -1,8 +1,6 @@
 // Copyright (C) 2021 Quentin Kniep <hello@quentinkniep.com>
 // Distributed under terms of the MIT license.
 
-use std::fmt::Display;
-
 pub type FrameID = usize;
 
 pub trait Replacer {
@@ -35,23 +33,6 @@ pub struct ClockReplacer {
     frames: Vec<ClockFrame>,
     hand: FrameID,
     num_unpinned: usize,
-}
-
-impl Display for ClockReplacer {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for (i, frame) in self.frames.iter().enumerate() {
-            write!(f, "{}", i)?;
-            if frame.pinned {
-                write!(f, "p")?;
-            }
-            if frame.used {
-                write!(f, "*")?;
-            }
-            write!(f, ", ")?;
-        }
-        write!(f, " (h={})", self.hand)?;
-        Ok(())
-    }
 }
 
 impl Replacer for ClockReplacer {
@@ -212,21 +193,13 @@ mod tests {
     #[test]
     fn clock_order() {
         let mut r = ClockReplacer::new(3);
-        println!("{}", r);
         assert_eq!(r.pick_victim(), Some(0));
-        println!("{}", r);
         use_page(&mut r, 0);
-        println!("{}", r);
         assert_eq!(r.pick_victim(), Some(1));
-        println!("{}", r);
         use_page(&mut r, 1);
-        println!("{}", r);
         use_page(&mut r, 0);
-        println!("{}", r);
         assert_eq!(r.pick_victim(), Some(2));
-        println!("{}", r);
         use_page(&mut r, 2);
-        println!("{}", r);
         assert_eq!(r.pick_victim(), Some(0));
         use_page(&mut r, 0);
         assert_eq!(r.pick_victim(), Some(1));

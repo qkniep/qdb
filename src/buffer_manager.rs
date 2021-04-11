@@ -2,7 +2,6 @@
 // Distributed under terms of the MIT license.
 
 use std::collections::{HashMap, VecDeque};
-use std::fmt::Display;
 use std::sync::Arc;
 
 use crate::disk_manager::DiskManager;
@@ -11,24 +10,17 @@ use crate::replacer::{ClockReplacer, FrameID, Replacer};
 
 /// The Buffer Manager is responsible for keeping pages in memory, keeping track of pinned pages.
 /// It interacts with the Disk Manager to retrieve these pages from disk and write them back.
-pub struct BufferManager<R = ClockReplacer> {
+/// All other parts of the DBMS get their memory buffers from here.
+pub struct BufferManager<R = ClockReplacer>
+where
+    R: Replacer,
+{
     max_pages: usize,
     pub pages: Vec<Arc<Page>>,
     page_table: HashMap<PageID, FrameID>,
     free_list: VecDeque<PageID>,
     replacer: R,
     disk_manager: DiskManager,
-}
-
-impl Display for BufferManager {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "BufferManager({}/{} pages free)",
-            self.pages_free(),
-            self.max_pages
-        )
-    }
 }
 
 impl<R: Replacer> BufferManager<R> {
@@ -91,7 +83,7 @@ impl<R: Replacer> BufferManager<R> {
         let frame = self.page_table[&page];
         // FIXME
         //self.pages[frame].pin_count -= 1;
-        self.replacer.unpin(page);
+        self.replacer.unpin(frame);
     }
 
     /// Flushes the given page to disk.
@@ -136,24 +128,45 @@ impl<R: Replacer> BufferManager<R> {
 mod tests {
     use super::*;
 
+    const CAPACITY: usize = 10;
+
     #[test]
     fn allocate_pages() {
-        let mut mm = BufferManager::<ClockReplacer>::new(10);
-        for _ in 0..10 {
+        let mut mm = BufferManager::<ClockReplacer>::new(CAPACITY);
+        for i in 0..CAPACITY {
+            assert_eq!(mm.pages_free(), CAPACITY - i);
             assert!(mm.new_page().is_some());
         }
-        assert!(mm.new_page().is_none());
+        for _ in 0..CAPACITY {
+            assert_eq!(mm.pages_free(), 0);
+            assert!(mm.new_page().is_none());
+        }
+        assert_eq!(mm.pages_free(), 0);
     }
 
     #[test]
-    fn pages_free() {
-        let mut mm = BufferManager::<ClockReplacer>::new(10);
-        for i in 0..10 {
-            assert_eq!(mm.pages_free(), 10 - i);
-            mm.new_page();
+    fn unpin_pages() {
+        let mut mm = BufferManager::<ClockReplacer>::new(CAPACITY);
+        for i in 0..CAPACITY {
+            assert_eq!(mm.pages_free(), CAPACITY - i);
+            assert!(mm.new_page().is_some());
         }
-        assert_eq!(mm.pages_free(), 0);
-        mm.new_page();
-        assert_eq!(mm.pages_free(), 0);
+        for i in 0..CAPACITY {
+            mm.unpin_page(i);
+        }
+        for i in 0..CAPACITY - 1 {
+            assert!(mm.new_page().is_some());
+        }
+        assert!(mm.fetch_page(0).is_some());
+    }
+
+    #[test]
+    fn write_and_read() {
+        let mut mm = BufferManager::<ClockReplacer>::new(CAPACITY);
+        let mut p_opt = mm.new_page();
+        assert!(p_opt.is_some());
+        //write!(p_opt.unwrap().data, "Hello");
+        mm.unpin_page(0);
+        // TODO
     }
 }

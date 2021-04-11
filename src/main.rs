@@ -31,8 +31,7 @@ struct CliArgs {
 }
 
 fn main() -> CliResult {
-    let mm = BufferManager::new(1000);
-    println!("{}", mm);
+    let mm: BufferManager = BufferManager::new(1000);
 
     let args = CliArgs::from_args();
     args.verbosity.setup_env_logger("qdb")?;
