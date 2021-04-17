@@ -23,6 +23,7 @@ impl DiskManager {
             db_file: OpenOptions::new()
                 .read(true)
                 .write(true)
+                .create(true)
                 .truncate(true)
                 .open(db_file_name)
                 .unwrap(),
@@ -65,13 +66,15 @@ mod tests {
         let mut buf2 = [0u8; PAGE_SIZE];
         let mut dm = DiskManager::new("xxxxxxx.tmp");
 
-        let s = "Hello World!";
-        buf2[..s.len()].copy_from_slice(s.as_bytes());
-
+        // read past EOF
         assert!(dm.read_page(0, &mut buf1).is_err());
 
-        assert!(dm.write_page(0, &buf2).is_ok());
-        assert!(dm.read_page(0, &mut buf1).is_ok());
-        assert_eq!(buf1, buf2);
+        for i in 0..10 {
+            let s = format!("Page {}", i);
+            buf2[..s.len()].copy_from_slice(s.as_bytes());
+            assert!(dm.write_page(i, &buf2).is_ok());
+            assert!(dm.read_page(i, &mut buf1).is_ok());
+            assert_eq!(buf1, buf2);
+        }
     }
 }

@@ -20,4 +20,3 @@ COPY --from=builder /usr/local/cargo/bin/qdb .
 RUN chmod +x qdb && chown qdb:qdb qdb
 USER qdb
 CMD ["./qdb"]
-

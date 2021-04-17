@@ -2,8 +2,7 @@
 // Distributed under terms of the MIT license.
 
 use std::collections::{HashMap, VecDeque};
-use std::io::Write;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use crate::disk_manager::DiskManager;
 use crate::page::*;
@@ -17,7 +16,7 @@ where
     R: Replacer,
 {
     max_pages: usize,
-    pub pages: Vec<Arc<Page>>,
+    pub pages: Vec<Arc<RwLock<Page>>>,
     page_table: HashMap<PageID, FrameID>,
     free_list: VecDeque<PageID>,
     replacer: R,
@@ -29,7 +28,7 @@ impl<R: Replacer> BufferManager<R> {
     pub fn new(capacity: usize) -> BufferManager<R> {
         let mut bm = BufferManager {
             max_pages: capacity,
-            pages: vec![Arc::new(Page::default()); capacity],
+            pages: vec![Arc::new(RwLock::new(Page::default())); capacity],
             page_table: HashMap::with_capacity(capacity),
             free_list: VecDeque::with_capacity(capacity),
             replacer: R::new(capacity),
@@ -43,7 +42,8 @@ impl<R: Replacer> BufferManager<R> {
 
     /// Fetch the requested page, loading it form disk if necessary.
     /// Returns `None` if we failed to allocate the page, i.e. all pages are pinned.
-    pub fn fetch_page(&mut self, page: PageID) -> Option<Arc<Page>> {
+    // TODO don't panic
+    pub fn fetch_page(&mut self, page: PageID) -> Option<Arc<RwLock<Page>>> {
         // Check if requested page is already cached
         if let Some(&frame) = self.page_table.get(&page) {
             return Some(self.pages[frame].clone());
@@ -52,8 +52,14 @@ impl<R: Replacer> BufferManager<R> {
         match self.find_free_page() {
             None => None,
             Some(frame) => {
-                // TODO actually load page from disk
-                let p = Arc::new(Page::new(page));
+                let p = Arc::new(RwLock::new(Page::new(page)));
+                if self
+                    .disk_manager
+                    .read_page(page, &mut p.write().unwrap().data)
+                    .is_err()
+                {
+                    panic!("failed to read page from disk");
+                }
                 self.pages[frame] = p.clone();
                 self.page_table.insert(page, frame);
                 self.replacer.pin(frame);
@@ -64,12 +70,12 @@ impl<R: Replacer> BufferManager<R> {
 
     /// Allocates a new empty page.
     /// This page is pinned immediately.
-    pub fn new_page(&mut self) -> Option<Arc<Page>> {
+    pub fn new_page(&mut self) -> Option<Arc<RwLock<Page>>> {
         match self.find_free_page() {
             None => None,
             Some(frame) => {
                 let p_id = self.disk_manager.allocate_page();
-                let p = Arc::new(Page::new(p_id));
+                let p = Arc::new(RwLock::new(Page::new(p_id)));
                 self.pages[frame] = p.clone();
                 self.page_table.insert(p_id, frame);
                 self.replacer.pin(frame);
@@ -79,28 +85,41 @@ impl<R: Replacer> BufferManager<R> {
     }
 
     ///
-    // TODO handle failure b/c pin_count already was <= 0
-    pub fn unpin_page(&mut self, page: PageID) {
+    // TODO don't panic
+    pub fn unpin_page(&mut self, page: PageID, dirty: bool) {
         let frame = self.page_table[&page];
-        // FIXME
-        //self.pages[frame].pin_count -= 1;
+        let mut p = self.pages[frame].write().unwrap();
+
+        // Fail if not pinned
+        if p.pin_count <= 0 {
+            panic!("tried to unpin page that was not pinned");
+        }
+
+        if dirty {
+            p.dirty = true;
+        }
+        p.pin_count -= 1;
         self.replacer.unpin(frame);
     }
 
     /// Flushes the given page to disk.
     // TODO handle page not in page_table
+    // TODO don't panic
     pub fn flush_page(&mut self, page: PageID) {
         let frame = self.page_table.remove(&page).unwrap();
+        let p = self.pages[frame].read().unwrap();
         self.free_list.push_back(frame);
-        if self.pages[frame].dirty {
-            //self.disk_manager.write_page();
-            self.pages[frame].write_to_disk("out");
+        if p.dirty {
+            if self.disk_manager.write_page(page, &p.data).is_err() {
+                panic!("failed to write page to disk");
+            }
         }
     }
 
     ///
     pub fn delete_page(&mut self, page: PageID) {
         let frame = self.page_table[&page];
+        // TODO
     }
 
     pub fn pages_free(&self) -> usize {
@@ -115,7 +134,9 @@ impl<R: Replacer> BufferManager<R> {
     fn find_free_page(&mut self) -> Option<PageID> {
         if self.pages_free() == 0 {
             if let Some(frame) = self.replacer.pick_victim() {
-                self.flush_page(self.pages[frame].id);
+                let l = self.pages[frame].clone();
+                let p = l.read().unwrap();
+                self.flush_page(p.id);
             } else {
                 return None;
             }
@@ -153,13 +174,13 @@ mod tests {
             assert!(mm.new_page().is_some());
         }
         for i in 0..CAPACITY {
-            mm.unpin_page(i);
+            mm.unpin_page(i, false);
         }
         for _ in 0..CAPACITY - 1 {
             assert!(mm.new_page().is_some());
         }
         assert!(mm.fetch_page(0).is_some());
-        mm.unpin_page(0);
+        mm.unpin_page(0, false);
         assert!(mm.new_page().is_some());
         assert!(mm.fetch_page(0).is_none());
     }
@@ -167,15 +188,26 @@ mod tests {
     #[test]
     fn write_and_read() {
         let mut mm = BufferManager::<ClockReplacer>::new(CAPACITY);
-        let mut p_opt = mm.new_page();
+        let p_opt = mm.new_page();
         assert!(p_opt.is_some());
-        //write!(p_opt.unwrap().data, "Hello");
-        mm.unpin_page(0);
-        // force the page out of cache
+        let p = p_opt.unwrap();
+        // Write something into this page
+        let s = "Hello".as_bytes();
+        p.write().unwrap().data[..s.len()].clone_from_slice(s);
+        // Read it back from cache
+        assert_eq!(p.read().unwrap().data[..5], *"Hello".as_bytes());
+        // Force the page out of cache
+        mm.unpin_page(0, true);
         for _ in 0..CAPACITY {
             assert!(mm.new_page().is_some());
         }
-        mm.fetch_page(0);
-        // TODO compare to written value
+        for i in 0..CAPACITY {
+            mm.unpin_page(i + 1, false);
+        }
+        // Read page from disk and compare with written value
+        let p_opt = mm.fetch_page(0);
+        assert!(p_opt.is_some());
+        let p = p_opt.unwrap();
+        assert_eq!(p.read().unwrap().data[..5], *"Hello".as_bytes());
     }
 }
