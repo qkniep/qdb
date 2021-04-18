@@ -24,7 +24,7 @@ where
 }
 
 impl<R: Replacer> BufferManager<R> {
-    ///
+    /// Initiate a new Buffer Manager.
     pub fn new(capacity: usize) -> BufferManager<R> {
         let mut bm = BufferManager {
             max_pages: capacity,
@@ -117,20 +117,18 @@ impl<R: Replacer> BufferManager<R> {
     }
 
     ///
+    // TODO
     pub fn delete_page(&mut self, page: PageID) {
         let frame = self.page_table[&page];
-        // TODO
     }
 
+    /// Number of pages currently free (i.e. not used at all, pinned or unpinned).
     pub fn pages_free(&self) -> usize {
         self.free_list.len()
     }
 
-    pub fn bytes_free(&self) -> usize {
-        self.pages_free() * PAGE_SIZE
-    }
-
-    ///
+    /// Finds a free page from the free list.
+    /// Frees an unpinned page first if necessary.
     fn find_free_page(&mut self) -> Option<PageID> {
         if self.pages_free() == 0 {
             if let Some(frame) = self.replacer.pick_victim() {

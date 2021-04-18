@@ -15,6 +15,7 @@ pub struct DiskManager {
 }
 
 impl DiskManager {
+    /// Initialize a new Disk Manager, creating a new file.
     // TODO handle file create error
     pub fn new(db_file_name: &str) -> Self {
         Self {
@@ -47,12 +48,14 @@ impl DiskManager {
         Ok(())
     }
 
+    ///
     pub fn allocate_page(&mut self) -> PageID {
         let id = self.next_page_id;
         self.next_page_id += 1;
         return id;
     }
 
+    ///
     pub fn deallocate_page(page: PageID) {}
 }
 
