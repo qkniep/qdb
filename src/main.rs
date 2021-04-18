@@ -12,10 +12,10 @@ mod relation;
 mod replacer;
 mod table_scan;
 
+use std::io::{self, Write};
+
 use quicli::prelude::*;
 use structopt::StructOpt;
-
-use buffer_manager::BufferManager;
 
 #[derive(Debug, StructOpt)]
 struct CliArgs {
@@ -30,21 +30,71 @@ struct CliArgs {
     verbosity: Verbosity,
 }
 
-fn main() -> CliResult {
-    let mm: BufferManager = BufferManager::new(1000);
+enum Statement {
+    Insert,
+    Select,
+}
 
+fn main() -> CliResult {
     let args = CliArgs::from_args();
     args.verbosity.setup_env_logger("qdb")?;
 
-    let content = read_file(&args.file)?;
-    let content_lines = content.lines();
-    let first_n_lines = content_lines.take(args.count);
+    loop {
+        let mut buf = String::new();
 
-    info!("Reading first {} lines of {:?}", args.count, args.file);
+        print_prompt();
+        read_user_input(&mut buf)?;
 
-    for line in first_n_lines {
-        println!("{}", line);
+        if buf.get(0..1) == Some("\\") {
+            perform_meta_command(&buf[1..]);
+            continue;
+        }
+
+        match prepare_statement(&buf) {
+            Ok(statement) => execute_statement(statement),
+            Err(err) => println!("{}", err),
+        }
+    }
+}
+
+fn perform_meta_command(cmd: &str) {
+    if cmd == "exit" {
+        std::process::exit(0);
+    } else {
+        println!("Unrecognized command '{}'.", cmd);
+    }
+}
+
+fn prepare_statement(sql: &str) -> Result<Statement, &str> {
+    if sql.get(0..6) == Some("insert") {
+        return Ok(Statement::Insert);
+    }
+    if sql.get(0..6) == Some("select") {
+        return Ok(Statement::Select);
     }
 
+    Err("Unknown SQL statement type.")
+}
+
+fn execute_statement(statement: Statement) {
+    match statement {
+        Statement::Insert => println!("This is where we would do an insert."),
+        Statement::Select => println!("This is where we would do a seelct."),
+    }
+}
+
+fn print_prompt() {
+    print!("qdb > ");
+    io::stdout().flush().unwrap();
+}
+
+fn read_user_input(buf: &mut String) -> io::Result<()> {
+    let n = io::stdin().read_line(buf)?;
+    if n <= 0 {
+        return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "no input"));
+    }
+
+    // Remove trailing newline character
+    buf.pop();
     Ok(())
 }
