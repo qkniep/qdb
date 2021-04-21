@@ -39,6 +39,8 @@ fn main() -> CliResult {
     let args = CliArgs::from_args();
     args.verbosity.setup_env_logger("qdb")?;
 
+    print_intro();
+
     loop {
         let mut buf = String::new();
 
@@ -58,7 +60,9 @@ fn main() -> CliResult {
 }
 
 fn perform_meta_command(cmd: &str) {
-    if cmd == "exit" {
+    if cmd == "?" || cmd == "help" {
+        print_help();
+    } else if cmd == "q" || cmd == "quit" {
         std::process::exit(0);
     } else {
         println!("Unrecognized command '{}'.", cmd);
@@ -81,6 +85,15 @@ fn execute_statement(statement: Statement) {
         Statement::Insert => println!("This is where we would do an insert."),
         Statement::Select => println!("This is where we would do a seelct."),
     }
+}
+
+fn print_intro() {
+    println!("Welcome to QDB. Use '\\?' to see available commands or start typing SQL.");
+}
+
+fn print_help() {
+    println!("\\?, \\help\tShow this overview");
+    println!("\\q, \\quit\tClose the current prompt and disconnect");
 }
 
 fn print_prompt() {
