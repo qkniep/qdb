@@ -7,6 +7,7 @@ mod catalog;
 mod disk_manager;
 mod extensible_hash;
 mod external_sort;
+mod lock_manager;
 mod nested_loop_join;
 mod page;
 mod relation;
