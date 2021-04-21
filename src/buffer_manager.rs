@@ -164,6 +164,7 @@ mod tests {
         assert_eq!(mm.pages_free(), 0);
     }
 
+    // TODO fix flaky test
     #[test]
     fn unpin_pages() {
         let mut mm = BufferManager::<ClockReplacer>::new(CAPACITY);

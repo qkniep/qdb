@@ -8,4 +8,5 @@ edition = "2018"
 
 [dependencies]
 quicli = "0.4"
+sqlparser = "0.9"
 structopt = "0.2"

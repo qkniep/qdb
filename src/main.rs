@@ -10,12 +10,16 @@ mod nested_loop_join;
 mod page;
 mod relation;
 mod replacer;
+mod sql;
 mod table_scan;
 
 use std::io::{self, Write};
 
 use quicli::prelude::*;
+use sqlparser::ast::Statement;
 use structopt::StructOpt;
+
+use sql::parse_sql_statement;
 
 #[derive(Debug, StructOpt)]
 struct CliArgs {
@@ -28,15 +32,6 @@ struct CliArgs {
 
     #[structopt(flatten)]
     verbosity: Verbosity,
-}
-
-enum Statement {
-    Select,
-    Insert,
-    Update,
-    Delete,
-    CreateTable(String),
-    DropTable(String),
 }
 
 fn main() -> CliResult {
@@ -69,50 +64,22 @@ fn perform_meta_command(cmd: &str) {
     } else if cmd == "q" || cmd == "quit" {
         std::process::exit(0);
     } else {
-        println!("Unrecognized command '{}'.", cmd);
+        println!("Unrecognized command: {}", cmd);
     }
 }
 
-fn prepare_statement(sql: &str) -> Result<Statement, String> {
-    let parts: Vec<&str> = sql.split(' ').collect();
-    let command: &str = &(parts[0].to_lowercase());
-    let subcommand: &str = &(parts[1].to_lowercase());
-    match command {
-        "select" => Ok(Statement::Select),
-        "insert" => {
-            if subcommand != "into" {
-                Err("Syntax Error: 'insert' keyword needs to be followed by 'into'".to_owned())
-            } else {
-                Ok(Statement::Insert)
-            }
-        }
-        "update" => Ok(Statement::Update),
-        "delete" => Ok(Statement::Delete),
-        "create" => {
-            let table_name = sql.get(13..).unwrap();
-            Ok(Statement::CreateTable(table_name.to_owned()))
-        }
-        "drop" => {
-            let table_name = sql.get(11..).unwrap();
-            Ok(Statement::DropTable(table_name.to_owned()))
-        }
-        cmd => Err(format!("Unknown SQL command: {}", cmd)),
-    }
+fn prepare_statement(sql: &str) -> Result<Vec<Statement>, String> {
+    return parse_sql_statement(sql);
 }
 
-fn execute_statement(statement: Statement) {
-    match statement {
-        Statement::Select => println!("This is where we would do a select."),
-        Statement::Insert => println!("This is where we would do an insert."),
-        Statement::Update => println!("This is where we would do an update."),
-        Statement::Delete => println!("This is where we would do a delete."),
-        Statement::CreateTable(tbl) => println!("This is where we would create table {}", tbl),
-        Statement::DropTable(tbl) => println!("This is where we would drop table {}", tbl),
+fn execute_statement(statements: Vec<Statement>) {
+    for statement in statements {
+        println!("Executing: {:?}", statement);
     }
 }
 
 fn print_intro() {
-    println!("Welcome to QDB. Use '\\?' to see available commands or start typing SQL.");
+    println!("Welcome to QDB, you can use '\\?' to see available commands or start typing SQL.");
 }
 
 fn print_help() {
